@@ -1,0 +1,65 @@
+version: "3"
+
+services:
+    restbucks:
+        build: .
+        ports:
+            - "8000:8000"
+        volumes:
+            - .:/restbucks
+            - restbucks_static:/restbucks/static
+            - restbucks_media:/restbucks/media
+
+        command: sh -c "
+                        python manage.py wait_for_db &&
+                        python manage.py collectstatic --noinput &&
+                        python manage.py migrate &&
+                        python manage.py test &&
+                        python manage.py runserver 0.0.0.0:8000"
+        restart: always
+        env_file: .env
+        networks:
+            - main_network
+        depends_on:
+            - restbucks_db
+            - redis
+
+    restbucks_db:
+        image: postgres:12
+        container_name: restbucks_postgres
+        volumes: 
+            - restbucks_db:/var/lib/postgresql/data
+        restart: always
+        env_file: .env
+        ports: 
+            - "5431:5432"
+        networks:
+            - main_network
+    
+    redis:
+        image: redis:alpine
+        container_name: restbucks_redis
+        restart: on-failure
+        command: sh -c "redis-server"
+        networks:
+            - main_network
+
+    celery:
+        build: .
+        command: sh -c "celery -A restbucks worker -l info"
+        volumes:
+            - .:/restbucks
+        restart: on-failure
+        env_file: .env
+        depends_on:
+            - redis
+        networks:
+            - main_network
+
+
+volumes:
+    restbucks_static:
+    restbucks_media:
+    restbucks_db:
+networks:
+    main_network:
